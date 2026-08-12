@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bled / Stol</title>
+<meta name="theme-color" content="#22362c" />
+<style>html,body{margin:0;padding:0;background:#f4f0e4;}</style>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+<div id="root" style="font-family:system-ui,sans-serif;padding:24px;color:#55645a">Načítám…</div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+
+// ---------------------------------------------------------------------------
+// Bled + Stol, rodinná appka na víkend v kempu
+// Sdílené věci: odškrtne kdokoliv. Osobní věci: zvlášť za Honzu a Sáru. Pes: Agy.
+// Záložky: Balení, Cesta (Enyaq, známky, nabíjení), Stol (reálný GPX), Tipy.
+// Signature: slovinská turistická značka (Knafelcova) jako odškrtávací puntík.
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "bled-stol-trip-v5";
+
+const C = {
+  ink: "#1b2620", spruce: "#22362c", paper: "#f4f0e4", paper2: "#ece6d5",
+  lake: "#2f7d78", larch: "#d0982f", blaze: "#bf3a2b", contour: "#b7a482",
+  faint: "#7d8a7f", dog: "#8a5322",
+};
+
+const PEOPLE = [
+  { name: "Honza", color: C.lake },
+  { name: "Sára", color: C.larch },
+];
+
+const PP = (label) => ({ label, pp: true }); // věc, kterou má každý svoji
+
+const PACKING = [
+  {
+    id: "spani",
+    title: "Spaní a stan",
+    hint: "Spacák, polštář a čelovku má každý svoje, matrace je společná.",
+    items: [
+      { label: "Stan (kolíky, lanka, hydroizolace)", note: "půjčíme, táta / Decathlon" },
+      "Gumové kladivo na kolíky",
+      "Plachta pod stan",
+      PP("Spacák (komfort 0 až 5 °C)"),
+      { label: "Nafukovací dvojmatrace pro oba", note: "půjčíme, Decathlon" },
+      PP("Polštář"),
+      "Deka navíc",
+      PP("Čelovka a náhradní baterie"),
+      "Lucerna do stanu",
+    ],
+  },
+  {
+    id: "obleceni",
+    title: "Oblečení",
+    allPerson: true,
+    hint: "Každý si odškrtává svoje. Modře Honza, zlatě Sára.",
+    items: [
+      "Termo triko", "Mikina nebo fleece", "Nepromokavá bunda",
+      "Kalhoty i kraťasy", "Ponožky, i teplé na noc", "Čepice a rukavice na ráno",
+      "Treková obuv", "Lehká obuv do kempu", "Plavky",
+    ],
+  },
+  {
+    id: "kuchyne",
+    title: "Kuchyně a jídlo",
+    hint: "Ešus, láhev a termosku má každý svoje, vaření a zásoby jsou společné.",
+    items: [
+      "Vařič a plyn",
+      "Zapalovač a sirky v igelitu",
+      "Hrnec, pánev, naběračka",
+      PP("Ešus, talíř, hrnek, příbor"),
+      "Ostrý nůž a prkénko",
+      PP("Termoska"),
+      PP("Láhev na vodu"),
+      "Kanystr na vodu",
+      "Jídlo na 3 dny a rezerva",
+      "Káva, čaj, koření, olej",
+      "Pytle na odpad",
+      "Houbička, saponát, utěrka",
+    ],
+  },
+  {
+    id: "hygiena",
+    title: "Hygiena a lékárnička",
+    hint: "Ručník, kartáček a osobní léky má každý svoje.",
+    items: [
+      PP("Ručník (rychleschnoucí)"),
+      PP("Zubní kartáček"),
+      PP("Osobní léky"),
+      "Zubní pasta",
+      "Mýdlo a šampon",
+      "Toaleťák a vlhčené ubrousky",
+      "Dezinfekce na ruce",
+      "Opalovací krém",
+      "Repelent na klíšťata",
+      "Náplasti, léky, dezinfekce",
+      "Pinzeta na klíšťata",
+    ],
+  },
+  {
+    id: "agy",
+    title: "Pro Agy",
+    dog: true,
+    items: [
+      "Krmivo na celý pobyt a rezerva", "Miska na vodu a jídlo", "Vodítko a náhradní",
+      "Deka nebo pelíšek", "Ručník na oschnutí", "Sáčky na exkrementy", "Pamlsky",
+      "Očkovací průkaz", "Klíšťový přípravek", "Lékárnička, kus obvazu",
+    ],
+  },
+  {
+    id: "stol",
+    title: "Na Stol, denní batoh",
+    peak: true,
+    hint: "Oblečení, obuv, voda a svačina osobně, společné vybavení jednou.",
+    items: [
+      PP("Treková obuv"),
+      PP("Trekové hůlky"),
+      PP("Nepromokavá bunda nebo pláštěnka"),
+      PP("Teplá vrstva navíc"),
+      PP("Čepice a rukavice"),
+      PP("Voda 2 l na osobu"),
+      PP("Svačina a něco sladkého"),
+      PP("Sluneční brýle"),
+      PP("Nabitý telefon, tísňová 112"),
+      "Voda a miska pro Agy",
+      "Pamlsky pro Agy",
+      "Malá lékárnička",
+      "Čelovka (aspoň jedna)",
+      "Mapa nebo GPX v mobilu",
+      "Powerbanka",
+      "Opalovací krém",
+    ],
+  },
+  {
+    id: "ostatni",
+    title: "Ostatní",
+    hint: "Doklady má každý svoje.",
+    items: [
+      "Powerbanka a kabely", "Hotovost a karty",
+      { label: "Skládací židličky a stolek", note: "půjčíme, Decathlon" },
+      "Malý batoh na výlety", "Švýcarák nebo multitool", "Lano, pásky, izolepa",
+      "Karty a kniha na večer", PP("Doklady (OP, řidičák)"),
+    ],
+  },
+];
+
+// --- reálná data z nahraného GPX (Mapy.com), okruh Valvasorjev dom - Stol ---
+const ROUTE = [[46.426,14.1465],[46.42655,14.14767],[46.42663,14.14942],[46.4259,14.15152],[46.42565,14.15294],[46.42513,14.15411],[46.42492,14.15527],[46.42494,14.15655],[46.42486,14.15772],[46.4252,14.15838],[46.42557,14.15923],[46.42619,14.15933],[46.42684,14.16032],[46.42692,14.16124],[46.42684,14.16279],[46.42729,14.16257],[46.42795,14.16248],[46.42874,14.16242],[46.42903,14.16239],[46.42925,14.16273],[46.42954,14.16284],[46.43017,14.16288],[46.43019,14.16339],[46.43034,14.16381],[46.43068,14.16409],[46.43077,14.16448],[46.4307,14.16478],[46.4306,14.16527],[46.43084,14.16555],[46.43089,14.16585],[46.43124,14.1661],[46.43126,14.16663],[46.43129,14.16719],[46.43111,14.16785],[46.43047,14.16826],[46.43052,14.16896],[46.4304,14.1694],[46.43048,14.17003],[46.4305,14.17072],[46.43066,14.17142],[46.43064,14.17212],[46.43079,14.17268],[46.43086,14.17312],[46.43105,14.17357],[46.43122,14.17416],[46.43186,14.17563],[46.43271,14.17622],[46.43321,14.17516],[46.43358,14.17458],[46.43385,14.17418],[46.43335,14.17473],[46.43296,14.17575],[46.43225,14.17609],[46.43125,14.175],[46.43006,14.175],[46.42952,14.17585],[46.42901,14.17583],[46.42887,14.17665],[46.42902,14.17848],[46.4284,14.17887],[46.4283,14.17981],[46.42755,14.18007],[46.42676,14.17829],[46.42616,14.17715],[46.42562,14.17595],[46.42539,14.17513],[46.42515,14.17395],[46.42482,14.1748],[46.4241,14.1775],[46.4232,14.17756],[46.4224,14.17607],[46.42177,14.17596],[46.42113,14.17784],[46.42059,14.17427],[46.4201,14.17158],[46.41994,14.16828],[46.41933,14.16778],[46.41917,14.1664],[46.41879,14.16391],[46.41894,14.16186],[46.41989,14.16057],[46.42084,14.16002],[46.42139,14.15899],[46.42209,14.15794],[46.42263,14.1566],[46.423,14.15475],[46.42392,14.15328],[46.42499,14.15134],[46.42574,14.14977],[46.426,14.1465]];
+const PROF = [[0,1174],[0.14,1181],[0.28,1201],[0.47,1198],[0.59,1195],[0.71,1201],[0.82,1221],[0.92,1243],[1.04,1276],[1.13,1310],[1.22,1350],[1.32,1388],[1.44,1443],[1.58,1492],[1.7,1526],[1.79,1557],[1.88,1587],[1.99,1630],[2.03,1645],[2.09,1664],[2.14,1689],[2.23,1715],[2.29,1739],[2.37,1761],[2.43,1785],[2.49,1805],[2.52,1823],[2.57,1835],[2.63,1856],[2.67,1870],[2.74,1897],[2.8,1915],[2.84,1930],[2.92,1948],[3,1965],[3.08,1997],[3.14,2015],[3.2,2041],[3.27,2061],[3.35,2086],[3.42,2110],[3.48,2131],[3.53,2148],[3.57,2164],[3.63,2173],[3.78,2186],[3.9,2168],[4,2180],[4.08,2208],[4.16,2228],[4.25,2195],[4.34,2168],[4.44,2175],[4.59,2170],[4.75,2122],[4.87,2093],[4.95,2075],[5.04,2049],[5.19,2006],[5.31,1968],[5.4,1951],[5.49,1924],[5.65,1894],[5.77,1865],[5.88,1832],[5.95,1812],[6.05,1790],[6.12,1769],[6.35,1701],[6.51,1650],[6.66,1605],[6.79,1581],[6.96,1538],[7.26,1481],[7.52,1409],[7.77,1338],[7.88,1303],[8.01,1278],[8.22,1240],[8.41,1213],[8.56,1206],[8.68,1201],[8.8,1181],[8.91,1181],[9.04,1176],[9.19,1173],[9.36,1170],[9.56,1155],[9.71,1159],[9.97,1174]];
+const GPX = { km: 10.0, gain: 1190, min: 1152, max: 2230 };
+
+const catUnits = (cat) => cat.items.reduce((n, it) => n + (isPerson(it, cat) ? PEOPLE.length : 1), 0);
+const isPerson = (it, cat) => !!cat.allPerson || (typeof it === "object" && it.pp);
+const labelOf = (it) => (typeof it === "string" ? it : it.label);
+const TOTAL = PACKING.reduce((n, c) => n + catUnits(c), 0);
+const baseId = (cid, i) => `${cid}-${i}`;
+const personId = (cid, i, person) => `${cid}-${i}::${person}`;
+
+const CSS = `
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+.wrap { min-height: 100vh; background: radial-gradient(120% 60% at 50% -10%, rgba(47,125,120,0.18), transparent 60%), ${C.paper};
+  color: ${C.ink}; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding-bottom: 40px; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.container { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+
+.topbar { position: sticky; top: 0; z-index: 20; background: ${C.spruce}; color: ${C.paper}; padding: 14px 0 0; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+.eyebrow { font-size: 10.5px; letter-spacing: 3px; text-transform: uppercase; color: ${C.larch}; font-weight: 700; }
+.title { font-size: 26px; font-weight: 800; letter-spacing: -0.4px; margin: 2px 0 0; line-height: 1; }
+.title .sep { color: ${C.lake}; font-weight: 400; }
+.metarow { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 14px; font-size: 12px; color: #cdd8cf; }
+.metarow b { color: ${C.paper}; font-weight: 700; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 1 0 auto; min-width: 62px; text-align: center; padding: 11px 12px; cursor: pointer; font-size: 12.5px; font-weight: 700; letter-spacing: 0.2px;
+  color: #b9c6bb; background: transparent; border: none; border-bottom: 3px solid transparent; transition: color .18s, border-color .18s; }
+.tab.active { color: ${C.paper}; border-bottom-color: ${C.larch}; }
+
+.h2 { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; margin: 26px 0 4px; letter-spacing: -0.2px; }
+.lead { font-size: 13.5px; color: #55645a; line-height: 1.5; margin: 4px 0 0; }
+
+.gauge-card { display: flex; align-items: center; gap: 18px; background: #fff; border: 1px solid ${C.paper2}; border-radius: 16px; padding: 16px; margin-top: 18px; box-shadow: 0 6px 20px rgba(27,38,32,0.06); }
+.gauge { width: 92px; height: 92px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; position: relative; transition: background .4s ease; }
+.gauge::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; background: #fff; }
+.gauge .num { position: relative; z-index: 1; font-size: 22px; font-weight: 800; }
+.gauge .num small { font-size: 11px; font-weight: 600; }
+.gauge-txt .big { font-size: 15px; font-weight: 800; }
+.gauge-txt .small { font-size: 12.5px; color: #55645a; margin-top: 2px; }
+
+.cat { margin-top: 18px; }
+.cat-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px 12px 0 0; background: ${C.spruce}; color: ${C.paper}; }
+.cat-head.dog { background: ${C.dog}; }
+.cat-head.peak { background: ${C.lake}; }
+.cat-name { font-size: 14.5px; font-weight: 800; letter-spacing: 0.2px; }
+.cat-count { font-size: 12px; font-family: ui-monospace, Menlo, monospace; color: #d7e0d8; }
+.cat-head.dog .cat-count { color: #f0dcc4; }
+.cat-head.peak .cat-count { color: #d8efec; }
+.cat-body { background: #fff; border: 1px solid ${C.paper2}; border-top: none; border-radius: 0 0 12px 12px; overflow: hidden; }
+.cat-hint { font-size: 12px; color: ${C.faint}; padding: 9px 14px; background: ${C.paper}; border-bottom: 1px solid ${C.paper2}; }
+
+.item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; cursor: pointer; width: 100%; text-align: left; background: transparent; border: none; border-top: 1px solid ${C.paper}; font-size: 14.5px; color: ${C.ink}; line-height: 1.35; }
+.item:first-child { border-top: none; }
+.item:active { background: ${C.paper}; }
+.item.done .label { color: ${C.faint}; text-decoration: line-through; text-decoration-color: ${C.contour}; }
+.blaze { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 2.5px solid ${C.contour}; background: #fff; margin-top: 1px; position: relative; transition: border-color .2s, transform .18s; }
+.blaze::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: transparent; transition: background .2s; }
+.item.done .blaze { border-color: ${C.blaze}; }
+.item.done .blaze::after { background: ${C.blaze}; }
+.pop { animation: pop .28s ease; }
+@keyframes pop { 0%{transform:scale(.7)} 55%{transform:scale(1.18)} 100%{transform:scale(1)} }
+
+.prow { padding: 12px 14px; border-top: 1px solid ${C.paper}; }
+.prow:first-child { border-top: none; }
+.prow.done-all .plabel { color: ${C.faint}; }
+.plabel { font-size: 14.5px; margin-bottom: 9px; line-height: 1.3; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { display: flex; align-items: center; gap: 7px; padding: 7px 13px 7px 10px; border-radius: 999px; border: 1.5px solid ${C.contour}; background: #fff; font-size: 13px; font-weight: 700; color: ${C.ink}; cursor: pointer; transition: border-color .18s, background .18s; }
+.chip:active { transform: scale(.97); }
+.chip .mini { width: 15px; height: 15px; border-radius: 50%; border: 2px solid ${C.contour}; position: relative; transition: background .18s, border-color .18s; }
+
+.card { background: #fff; border: 1px solid ${C.paper2}; border-radius: 14px; padding: 16px; margin-top: 14px; box-shadow: 0 4px 16px rgba(27,38,32,0.05); }
+.stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 1px; background: ${C.paper2}; border: 1px solid ${C.paper2}; border-radius: 12px; overflow: hidden; margin-top: 16px; }
+.stat { background: #fff; padding: 14px; }
+.stat .v { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+.stat .v .u { font-size: 12px; font-weight: 600; color: ${C.faint}; }
+.stat .k { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: ${C.faint}; margin-top: 3px; font-weight: 700; }
+
+.viz-label { display:flex; justify-content: space-between; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: ${C.faint}; font-weight: 700; margin-bottom: 4px; }
+.viz-cap { font-size: 12px; color: ${C.faint}; margin-top: 6px; }
+.route-wrap { display:flex; justify-content:center; }
+
+.opt { display: flex; gap: 12px; padding: 13px 0; border-top: 1px solid ${C.paper}; }
+.opt:first-of-type { border-top: none; }
+.opt .n { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: ${C.spruce}; color: ${C.paper}; display: grid; place-items: center; font-size: 13px; font-weight: 800; margin-top: 1px; }
+.opt.time .n { width: auto; padding: 0 8px; border-radius: 13px; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; background: ${C.lake}; }
+.opt .body b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+.opt .body span { font-size: 13px; color: #55645a; line-height: 1.45; }
+
+.flag { display:flex; gap: 12px; padding: 13px 0; border-top: 1px solid ${C.paper}; }
+.flag:first-child { border-top: none; }
+.flag .tag { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: #fff; letter-spacing: 0.5px; }
+.flag .body b { display:block; font-size: 14px; margin-bottom: 2px; }
+.flag .body span { font-size: 13px; color: #55645a; line-height: 1.45; }
+.pill { display:inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 4px; }
+.pill.free { background: #dff0e6; color: #1f6b3b; }
+.pill.pay { background: #fbe7cf; color: #8a5a12; }
+.pill.eat { background: #e6eef7; color: #1f4a7a; }
+.note-lend { font-size: 11.5px; color: ${C.faint}; font-weight: 600; white-space: nowrap; }
+
+.tiplist { margin: 8px 0 0; padding: 0; list-style: none; }
+.tip { display: flex; gap: 11px; padding: 11px 0; border-top: 1px solid ${C.paper}; font-size: 14px; line-height: 1.45; }
+.tip:first-child { border-top: none; }
+.tip .mk { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid ${C.blaze}; position: relative; margin-top: 1px; }
+.tip .mk::after { content:""; position:absolute; inset:4px; border-radius:50%; background:${C.blaze}; }
+.tip b { color: ${C.ink}; }
+.tip.warn .mk { border-color: ${C.larch}; }
+.tip.warn .mk::after { background: ${C.larch}; }
+
+.bar { display: flex; gap: 8px; margin-top: 18px; align-items: center; flex-wrap: wrap; }
+.btn { font-size: 12.5px; font-weight: 700; padding: 9px 14px; border-radius: 999px; border: 1px solid ${C.contour}; background: #fff; color: ${C.spruce}; cursor: pointer; }
+.btn:active { background: ${C.paper}; }
+.share-note { font-size: 11.5px; color: ${C.faint}; margin-top: 14px; line-height: 1.5; text-align: center; }
+.dot-live { display:inline-block; width:7px; height:7px; border-radius:50%; background:${C.lake}; margin-right:6px; vertical-align:middle; }
+
+*:focus-visible { outline: 3px solid ${C.lake}; outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } * { transition: none !important; } }
+`;
+
+function useSharedPacking() {
+  const [checked, setChecked] = useState({});
+  const [online, setOnline] = useState(true);
+  const pull = useCallback(async () => {
+    try {
+      const r = await fetch("/api/state", { cache: "no-store" });
+      if (r.ok) { setChecked(await r.json()); setOnline(true); }
+    } catch (e) { setOnline(false); }
+  }, []);
+  useEffect(() => { pull(); }, [pull]);
+  useEffect(() => {
+    const iv = setInterval(() => { if (!document.hidden) pull(); }, 3000);
+    return () => clearInterval(iv);
+  }, [pull]);
+  const send = async (payload, optimistic) => {
+    setChecked(optimistic);
+    try {
+      const r = await fetch("/api/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) { setChecked(await r.json()); setOnline(true); }
+    } catch (e) { setOnline(false); }
+  };
+  const toggle = useCallback((id) => {
+    setChecked((prev) => {
+      const n = { ...prev }; if (n[id]) delete n[id]; else n[id] = 1;
+      send({ op: "toggle", id }, n);
+      return n;
+    });
+  }, []);
+  const reset = useCallback(() => { send({ op: "reset" }, {}); }, []);
+  return { checked, toggle, reset, online };
+}
+
+function Gauge({ done, total }) {
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const deg = (pct / 100) * 360;
+  return (
+    <div className="gauge-card">
+      <div className="gauge" style={{ background: `conic-gradient(${C.larch} ${deg}deg, ${C.paper2} 0deg)` }}>
+        <div className="num mono">{pct}<small>%</small></div>
+      </div>
+      <div className="gauge-txt">
+        <div className="big">Sbaleno {done} z {total}</div>
+        <div className="small">Sdílené věci vidí celá parta, osobní má každý svoje.</div>
+      </div>
+    </div>
+  );
+}
+
+function BlazeItem({ id, label, note, done, onToggle }) {
+  const [pop, setPop] = useState(false);
+  const click = () => { if (!done) { setPop(true); setTimeout(() => setPop(false), 300); } onToggle(id); };
+  return (
+    <button className={`item${done ? " done" : ""}`} onClick={click} aria-pressed={done}>
+      <span className={`blaze${pop ? " pop" : ""}`} />
+      <span className="label">{label}{note && <span className="note-lend"> · {note}</span>}</span>
+    </button>
+  );
+}
+
+function PersonRow({ cid, idx, label, checked, onToggle }) {
+  const allDone = PEOPLE.every((p) => checked[personId(cid, idx, p.name)]);
+  return (
+    <div className={`prow${allDone ? " done-all" : ""}`}>
+      <div className="plabel">{label}</div>
+      <div className="chips">
+        {PEOPLE.map((p) => {
+          const id = personId(cid, idx, p.name);
+          const done = !!checked[id];
+          return (
+            <button key={id} className="chip" onClick={() => onToggle(id)} aria-pressed={done} aria-label={`${label}, ${p.name}`}
+              style={done ? { borderColor: p.color, background: p.color + "1f", color: C.spruce } : {}}>
+              <span className="mini" style={done ? { borderColor: p.color, background: p.color } : {}} />
+              {p.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ElevationProfile() {
+  const W = 100, H = 46, padT = 4, padB = 2;
+  const xs = PROF.map((p) => p[0]), es = PROF.map((p) => p[1]);
+  const kmMax = xs[xs.length - 1], eMin = Math.min(...es), eMax = Math.max(...es);
+  const X = (km) => (km / kmMax) * W;
+  const Y = (e) => padT + (1 - (e - eMin) / (eMax - eMin)) * (H - padT - padB);
+  const line = PROF.map((p) => `${X(p[0]).toFixed(2)},${Y(p[1]).toFixed(2)}`).join(" ");
+  const area = `0,${H} ${line} ${W},${H}`;
+  const sIdx = es.indexOf(eMax);
+  const sx = X(PROF[sIdx][0]), sy = Y(PROF[sIdx][1]);
+  return (
+    <div>
+      <div className="viz-label"><span>Výškový profil</span><span className="mono">{GPX.km} km</span></div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block" }} preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="elg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={C.lake} stopOpacity="0.55" />
+            <stop offset="1" stopColor={C.spruce} stopOpacity="0.12" />
+          </linearGradient>
+        </defs>
+        <polygon points={area} fill="url(#elg)" />
+        <polyline points={line} fill="none" stroke={C.spruce} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        <circle cx={sx} cy={sy} r="2.2" fill={C.blaze} stroke="#fff" strokeWidth="0.8" />
+      </svg>
+      <div className="viz-cap">Start a cíl u chaty Valvasorjev dom ({PROF[0][1]} m), vrchol Stol červeně (2236 m).</div>
+    </div>
+  );
+}
+
+function RouteShape() {
+  const size = 100, pad = 8;
+  const latMid = ROUTE.reduce((s, p) => s + p[0], 0) / ROUTE.length;
+  const k = Math.cos((latMid * Math.PI) / 180);
+  const proj = ROUTE.map(([la, lo]) => [lo * k, la]);
+  const xsV = proj.map((p) => p[0]), ysV = proj.map((p) => p[1]);
+  const minX = Math.min(...xsV), maxX = Math.max(...xsV), minY = Math.min(...ysV), maxY = Math.max(...ysV);
+  const span = Math.max(maxX - minX, maxY - minY);
+  const sc = (size - 2 * pad) / span;
+  const offX = pad + ((size - 2 * pad) - (maxX - minX) * sc) / 2;
+  const offY = pad + ((size - 2 * pad) - (maxY - minY) * sc) / 2;
+  const P = (p) => [offX + (p[0] - minX) * sc, size - (offY + (p[1] - minY) * sc)];
+  const pts = proj.map(P);
+  const line = pts.map((p) => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ");
+  const es = PROF.map((p) => p[1]); const sIdx = es.indexOf(Math.max(...es));
+  const start = pts[0], summit = P(proj[sIdx]);
+  return (
+    <div>
+      <div className="viz-label"><span>Tvar trasy</span><span className="mono">okruh</span></div>
+      <div className="route-wrap">
+        <svg viewBox={`0 0 ${size} ${size}`} width="72%" style={{ maxWidth: 260 }}>
+          <polyline points={line} fill="none" stroke={C.lake} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+          <circle cx={summit[0]} cy={summit[1]} r="3.6" fill={C.blaze} stroke="#fff" strokeWidth="1.2" />
+          <circle cx={start[0]} cy={start[1]} r="3.2" fill={C.spruce} stroke="#fff" strokeWidth="1.2" />
+        </svg>
+      </div>
+      <div className="viz-cap">Zelený bod je start u chaty, červený je vrchol Stol.</div>
+    </div>
+  );
+}
+
+function App() {
+  const [tab, setTab] = useState("baleni");
+  const { checked, toggle, reset } = useSharedPacking();
+  const done = Object.keys(checked).length;
+
+  return (
+    <div className="wrap">
+      <style>{CSS}</style>
+
+      <div className="topbar">
+        <div className="container">
+          <div className="eyebrow">Kempový víkend · Julské Alpy</div>
+          <h1 className="title">Bled <span className="sep">/</span> Stol</h1>
+          <div className="metarow">
+            <span><b>River Camping Bled</b></span>
+            <span><b>25. až 28. 9.</b></span>
+            <span><b>Honza, Sára</b> a Agy</span>
+          </div>
+          <div className="tabs" role="tablist">
+            <button className={`tab${tab === "baleni" ? " active" : ""}`} onClick={() => setTab("baleni")}>Balení</button>
+            <button className={`tab${tab === "program" ? " active" : ""}`} onClick={() => setTab("program")}>Program</button>
+            <button className={`tab${tab === "cesta" ? " active" : ""}`} onClick={() => setTab("cesta")}>Cesta</button>
+            <button className={`tab${tab === "stol" ? " active" : ""}`} onClick={() => setTab("stol")}>Stol</button>
+            <button className={`tab${tab === "jidlo" ? " active" : ""}`} onClick={() => setTab("jidlo")}>Jídlo</button>
+            <button className={`tab${tab === "tipy" ? " active" : ""}`} onClick={() => setTab("tipy")}>Tipy</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="container">
+
+        {tab === "baleni" && (
+          <>
+            <Gauge done={done} total={TOTAL} />
+            {PACKING.map((cat) => {
+              const cls = cat.dog ? " dog" : cat.peak ? " peak" : "";
+              let cdone = 0;
+              cat.items.forEach((it, i) => {
+                if (isPerson(it, cat)) PEOPLE.forEach((p) => { if (checked[personId(cat.id, i, p.name)]) cdone++; });
+                else if (checked[baseId(cat.id, i)]) cdone++;
+              });
+              return (
+                <div className="cat" key={cat.id}>
+                  <div className={`cat-head${cls}`}>
+                    <span className="cat-name">{cat.title}</span>
+                    <span className="cat-count mono">{cdone}/{catUnits(cat)}</span>
+                  </div>
+                  <div className="cat-body">
+                    {cat.hint && <div className="cat-hint">{cat.hint}</div>}
+                    {cat.items.map((it, i) =>
+                      isPerson(it, cat) ? (
+                        <PersonRow key={baseId(cat.id, i)} cid={cat.id} idx={i} label={labelOf(it)} checked={checked} onToggle={toggle} />
+                      ) : (
+                        <BlazeItem key={baseId(cat.id, i)} id={baseId(cat.id, i)} label={labelOf(it)} note={typeof it === "object" ? it.note : undefined} done={!!checked[baseId(cat.id, i)]} onToggle={toggle} />
+                      )
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="bar"><button className="btn" onClick={reset}>Vynulovat seznam</button></div>
+            <p className="share-note">
+              <span className="dot-live" />
+              Seznam je živě sdílený. Co odškrtne jeden, uvidí za pár vteřin ostatní na svých telefonech. Nesdílej odkaz s cizími.
+            </p>
+          </>
+        )}
+
+        {tab === "program" && (
+          <>
+            <h2 className="h2">Program víkendu</h2>
+            <div className="card">
+              <div className="opt"><div className="n" style={{ background: C.contour }}>Pá</div><div className="body"><b>25. 9. Cesta do Bledu</b><span>Ráno odjezd z Kladna, dvě nabíjení po cestě, večer check in na River Camping Bled. Detail v záložce Cesta.</span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.lake }}>So</div><div className="body"><b>26. 9. Stol, celodenní trek</b><span>Okruh z Valvasorjev dom na nejvyšší vrchol Karavank. Detail v záložce Stol.</span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.larch }}>Ne</div><div className="body"><b>27. 9. Velika planina a jezero Bled</b><span>Dopoledne lanovka a lehký okruh po planině, odpoledne návrat k Bledu, procházka kolem jezera a večeře v kempu.</span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.contour }}>Po</div><div className="body"><b>28. 9. Odjezd domů</b><span>Sbalit tábor a vyrazit zpět, cestou nabíjení jako v pátek.</span></div></div>
+            </div>
+
+            <h2 className="h2">Neděle: Velika planina a jezero</h2>
+            <p className="lead">Půldenní pohoda. Lanovka vyveze nahoru za pár minut, pak lehký okruh po pastvinách k pastýřské vesnici. S Agy v pohodě.</p>
+            <div className="stat-grid">
+              <div className="stat"><div className="v mono">~1600<span className="u"> m</span></div><div className="k">Plató</div></div>
+              <div className="stat"><div className="v mono">~5<span className="u"> min</span></div><div className="k">Lanovka nahoru</div></div>
+              <div className="stat"><div className="v mono">~2<span className="u"> h</span></div><div className="k">Okruh po planině</div></div>
+              <div className="stat"><div className="v mono">ANO</div><div className="k">Pes vítán</div></div>
+            </div>
+            <div className="card">
+              <div className="opt time"><div className="n">08:30</div><div className="body"><b>Odjezd z kempu</b><span>K dolní stanici v Kamniška Bistrica je to asi 1 h 15 min.</span></div></div>
+              <div className="opt time"><div className="n">09:45</div><div className="body"><b>Lanovka nahoru</b><span>Okruh přes Velkou a Malou planinu, pastýřská vesnice a kaple Marie Snežne.</span></div></div>
+              <div className="opt time"><div className="n">~12:30</div><div className="body"><b>Dolů a přejezd k Bledu</b><span>Krátký oběd nebo svačina a zpátky k jezeru, asi 1 h 15 min.</span></div></div>
+              <div className="opt time"><div className="n">~14:30</div><div className="body"><b>Procházka kolem jezera</b><span>Pohodový okruh, pak zpět do kempu a večeře.</span></div></div>
+            </div>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span>Lanovka do konce září jezdí často. Zpáteční kolem <b>24 eur</b>, se sedačkou 26, <b>pes 5 eur</b>. Sedačka může být v rekonstrukci, ověř na velikaplanina.si.</span></li>
+              <li className="tip warn"><span className="mk" /><span>Nahoře je o nějakých <b>8 °C chladněji</b> a rychle přijde mlha. Vezmi vrstvu a vodu, nahoře pramen není, i pro Agy.</span></li>
+              <li className="tip"><span className="mk" /><span>Agy na vodítku, v lanovce doporučují náhubek. Tenisky na okruh stačí.</span></li>
+            </ul>
+
+            <h2 className="h2">Odpoledne u jezera Bled</h2>
+            <p className="lead">Žádné shony. Z planiny zpátky k Bledu, projdete se kolem jezera a večer si v klidu uvaříte v kempu.</p>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span><b>Okruh kolem jezera</b> je asi 6 km po rovině, tak 1,5 hodiny, s Agy úplná pohoda.</span></li>
+              <li className="tip"><span className="mk" /><span>Kdo bude mít sílu, může přidat výstup na vyhlídku <b>Ojstrica nebo Mala Osojnica</b>, těch pár minut nahoru stojí za to.</span></li>
+              <li className="tip"><span className="mk" /><span>Cestou se dá zastavit na <b>kremšnitu</b>, místní krémový řez, ke kterému Bled patří.</span></li>
+              <li className="tip"><span className="mk" /><span>Pak zpátky do kempu a <b>večeře</b>. Na vařiči zvládnete jednoduché jednohrncové jídlo, dole je karta se seznamem věcí na vaření.</span></li>
+            </ul>
+          </>
+        )}
+
+        {tab === "cesta" && (
+          <>
+            <h2 className="h2">Pátek ráno, Kladno do Bledu</h2>
+            <p className="lead">Trasa přes Rakousko (Linec, Salzburg, Villach) a tunel Karavanky. Elektrický Enyaq zvládne cestu se dvěma nabíjecími zastávkami.</p>
+
+            <div className="stat-grid">
+              <div className="stat"><div className="v mono">~620<span className="u"> km</span></div><div className="k">Vzdálenost</div></div>
+              <div className="stat"><div className="v mono">~8<span className="u"> h</span></div><div className="k">S pauzami</div></div>
+              <div className="stat"><div className="v mono">3</div><div className="k">Země na trase</div></div>
+              <div className="stat"><div className="v mono">2</div><div className="k">Nabíjení</div></div>
+            </div>
+
+            <h2 className="h2">Itinerář dne</h2>
+            <div className="card">
+              <div className="opt time"><div className="n">07:00</div><div className="body"><b>Odjezd z Kladna</b><span>Vyjeď s plnou baterií. Reálný dojezd Enyaqu na dálnici je na podzim asi 350 až 400 km.</span></div></div>
+              <div className="opt time"><div className="n">~09:30</div><div className="body"><b>1. nabíjení, okolí Lince</b><span>Po zhruba 260 km. DC z nízkého stavu do 80 % za nějakých 30 minut, kafe a venčení Agy.</span></div></div>
+              <div className="opt time"><div className="n">~11:00</div><div className="body"><b>Salzburg a dálnice A10 Tauern</b><span>Placené tunely Tauern a Katschberg, mýto se platí navíc k známce.</span></div></div>
+              <div className="opt time"><div className="n">~13:00</div><div className="body"><b>2. nabíjení, okolí Villachu</b><span>Krátký top up před tunelem, ať dojedeš do Bledu s rezervou.</span></div></div>
+              <div className="opt time"><div className="n">~15:00</div><div className="body"><b>Tunel Karavanky a Bled</b><span>Průjezd do Slovinska a check in na River Camping Bled.</span></div></div>
+            </div>
+
+            <h2 className="h2">Dálniční známky a mýto</h2>
+            <div className="card">
+              <div className="flag">
+                <div className="tag" style={{ background: "#11457a" }}>CZ</div>
+                <div className="body"><b>Česko <span className="pill free">zdarma</span></b><span>Elektromobil se českou SPZ má dálnice zdarma, systém ho pozná automaticky. Nic nekupuješ.</span></div>
+              </div>
+              <div className="flag">
+                <div className="tag" style={{ background: "#a3132a" }}>AT</div>
+                <div className="body"><b>Rakousko <span className="pill pay">platí se</span></b><span>Elektro výjimku nemá. Kup digitální 10denní vignette od ASFINAG (kolem 13 eur). Navíc mýto za tunely: Tauern a Katschberg kolem 14 až 15 eur, Karavanky kolem 8 až 9 eur. Dá se předplatit online.</span></div>
+              </div>
+              <div className="flag">
+                <div className="tag" style={{ background: "#0a7d3f" }}>SI</div>
+                <div className="body"><b>Slovinsko <span className="pill pay">platí se</span></b><span>Taky bez výjimky pro elektro. Kup 7denní e vinjetu od DARS (16 eur), váže se na SPZ. Desetidenní není, týdenní na váš víkend stačí.</span></div>
+              </div>
+            </div>
+            <p className="lead">Ceny jsou orientační pro rok 2026, před cestou si je ověř na oficiálních webech (shop.asfinag.at, evinjeta.dars.si). Rakouskou digitální známku kup pár dní předem, ať platí hned.</p>
+
+            <h2 className="h2">Nabíjení Enyaqu</h2>
+            <div className="card">
+              <div className="stat-grid" style={{ marginTop: 0, border: "none" }}>
+                <div className="stat"><div className="v mono">77<span className="u"> kWh</span></div><div className="k">Baterie</div></div>
+                <div className="stat"><div className="v mono">~135<span className="u"> kW</span></div><div className="k">Max DC</div></div>
+                <div className="stat"><div className="v mono">~30<span className="u"> min</span></div><div className="k">10 na 80 %</div></div>
+                <div className="stat"><div className="v mono">~380<span className="u"> km</span></div><div className="k">Reálný dojezd</div></div>
+              </div>
+              <ul className="tiplist" style={{ marginTop: 12 }}>
+                <li className="tip"><span className="mk" /><span>Vyjeď <b>plný</b> a nabíjej radši z nízkého stavu do 80 %, tam je to nejrychlejší.</span></li>
+                <li className="tip"><span className="mk" /><span>Nabíječky si naplánuj v appce <b>Chargee</b> nebo v navigaci auta podle aktuální obsazenosti.</span></li>
+                <li className="tip warn"><span className="mk" /><span>Na podzim a v horách dojezd klesá, do Villachu je to <b>do kopce</b>, počítej s rezervou.</span></li>
+              </ul>
+            </div>
+          </>
+        )}
+
+        {tab === "stol" && (
+          <>
+            <h2 className="h2">Stol, 2236 m</h2>
+            <p className="lead">Nejvyšší vrchol Karavank a strážce nad Bledem. Čísla dole jsou z tvého nahraného GPX (okruh z Valvasorjev dom). Technicky snadné, ale pořádně strmé. S Agy na vodítku v pohodě, žádná lana ani ferrata.</p>
+
+            <div className="stat-grid">
+              <div className="stat"><div className="v mono">2236<span className="u"> m</span></div><div className="k">Vrchol</div></div>
+              <div className="stat"><div className="v mono">+{GPX.gain}<span className="u"> m</span></div><div className="k">Převýšení</div></div>
+              <div className="stat"><div className="v mono">{GPX.km}<span className="u"> km</span></div><div className="k">Okruh</div></div>
+              <div className="stat"><div className="v mono">~6<span className="u"> h</span></div><div className="k">Čas okruhu</div></div>
+            </div>
+
+            <div className="card"><ElevationProfile /></div>
+            <div className="card"><RouteShape /></div>
+
+            <h2 className="h2">Dvě varianty startu</h2>
+            <div className="card">
+              <div className="opt"><div className="n">1</div><div className="body"><b>Od chaty Valvasorjev dom (1181 m)</b><span>Přesně tahle trasa z tvého GPX. Vyjedeš 5 km lesní cestou k chatě a jdeš okruh nahoru a dolů. Kratší den, doporučeno s Agy. Z kempu autem asi 25 až 30 minut směr Žirovnica a přehrada Završnica.</span></div></div>
+              <div className="opt"><div className="n">2</div><div className="body"><b>Od přehrady Završnica</b><span>Poctivá verze celá pěšky. Přidá zhruba hodinu a 300 m navíc každým směrem.</span></div></div>
+            </div>
+
+            <h2 className="h2">Se psem a konec září</h2>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span>Severní strana vrcholu spadá strmě do Rakouska. Na hřebeni drž Agy <b>nakrátko</b>.</span></li>
+              <li className="tip warn"><span className="mk" /><span>Chata Prešernova koča pod vrcholem má otevřeno <b>jen v létě</b>, koncem září s ní radši nepočítej.</span></li>
+              <li className="tip"><span className="mk" /><span>Nahoře <b>není voda</b>, ber dost pro sebe i pro Agy.</span></li>
+              <li className="tip warn"><span className="mk" /><span>Nad 2000 m může být <b>první sníh nebo náledí</b>. Vyraž brzy ráno, den se krátí.</span></li>
+            </ul>
+
+            <div className="card" style={{ marginTop: 18 }}>
+              <b style={{ fontSize: 14 }}>GPX ke stažení</b>
+              <p className="lead" style={{ marginTop: 6 }}>Soubor <span className="mono">Stol_trasa.gpx</span> máš přiložený vedle appky. Naimportuj ho do Mapy.cz, Komootu nebo hodinek.</p>
+            </div>
+          </>
+        )}
+
+        {tab === "jidlo" && (
+          <>
+            <h2 className="h2">Jídlo v kempu</h2>
+            <p className="lead">Jednoduchá jídla na vařič nebo na oheň, bez zbytečného nádobí. V sobotu po Stolu si dáte večeři v restauraci v kempu.</p>
+
+            <div className="card">
+              <div className="opt"><div className="n" style={{ background: C.contour }}>Pá</div><div className="body"><b>Pátek</b><span>Na cestu řízky s chlebem z domova, nebo se staví někde po cestě. Po příjezdu už jen lehká večeře.</span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.lake }}>So</div><div className="body"><b>Sobota, den na Stolu</b><span>Snídaně pořádná, vajíčka se slaninou. Večeře: <span className="pill eat">restaurace v kempu</span></span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.larch }}>Ne</div><div className="body"><b>Neděle</b><span>Snídaně omeleta. Večeře: selská pánev nebo slaninová frittata.</span></div></div>
+              <div className="opt"><div className="n" style={{ background: C.contour }}>Po</div><div className="body"><b>Pondělí, odjezd</b><span>Snídaně rychlá, dojíst zásoby, pak cesta domů.</span></div></div>
+            </div>
+
+            <h2 className="h2">Snídaně</h2>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span><b>Vajíčka se slaninou:</b> vyškvař slaninu, zaklop vajíčky, k tomu chleba. Klasika před túrou.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Slaninová omeleta se sýrem:</b> rozšlehaná vajíčka, orestovaná slanina a cibule, sýr navrch.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Volská oka na párku:</b> nakrájený párek do zlatova, na něj vajíčka, hotovo za pět minut.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Před Stolem lehčí varianta:</b> jogurt nebo kaše s ovocem, ať nejsi po ránu těžký na výstup.</span></li>
+            </ul>
+
+            <h2 className="h2">Večeře</h2>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span><b>Buřtguláš z jednoho hrnce:</b> cibule, kolečka buřtů, sladká paprika, brambory, protlak a voda. Za půl hodiny hustý guláš k chlebu.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Selská pánev:</b> vyškvařená slanina, brambory na kostky do zlatova, nakonec zaklopit vajíčky.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Předvařený guláš z domova:</b> uvař oblíbený guláš předem, v kempu jen ohřeješ. Druhý den nejlepší.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Slaninová frittata:</b> vajíčka se slaninou, cibulí a sýrem, nechat ztuhnout pod pokličkou.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Špekáčky a buřty z grilu:</b> naříznout do kříže, opéct nad ohněm, k tomu hořčice, cibule a chleba.</span></li>
+            </ul>
+
+            <div className="card" style={{ marginTop: 18 }}>
+              <b style={{ fontSize: 14 }}>Na nákup nezapomeň</b>
+              <p className="lead" style={{ marginTop: 6 }}>Vajíčka, slanina, buřty a párky, cibule, brambory, sladká paprika, protlak, chleba, hořčice, olej nebo sádlo. Vaření a nádobí najdeš v seznamu Balení.</p>
+            </div>
+          </>
+        )}
+
+        {tab === "tipy" && (
+          <>
+            <h2 className="h2">Praktické tipy</h2>
+            <ul className="tiplist">
+              <li className="tip warn"><span className="mk" /><span><b>Počasí:</b> přes den fajn, noci klidně 3 až 8 °C. Zkontroluj předpověď pár dní předem.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Klíšťata</b> jsou na podzim pořád aktivní, repelent a pinzeta se hodí.</span></li>
+              <li className="tip warn"><span className="mk" /><span><b>Vintgar:</b> do soutěsky psi nesmí, na trek s Agy ji vynech.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Voda pro Agy</b> na každý výlet, prameny na hřebeni nejsou.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Nabitý telefon</b> a stažené mapy nebo GPX, nahoře bývá slabý signál.</span></li>
+            </ul>
+
+            <h2 className="h2">Kdyby něco</h2>
+            <div className="card"><p className="lead" style={{ marginTop: 0 }}>Tísňová linka ve Slovinsku i horská služba: <b className="mono" style={{ fontSize: 15 }}>112</b>. Řekni polohu (souřadnice z mapy v mobilu), počet lidí a co se stalo.</p></div>
+
+            <h2 className="h2">Další treky u Bledu</h2>
+            <ul className="tiplist">
+              <li className="tip"><span className="mk" /><span><b>Debela peč (2014 m):</b> hřebenovka z Pokljuky, střední, super výhledy, s Agy v pohodě.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Viševnik (2050 m):</b> kratší a strmý, nejlepší pohled na Triglav.</span></li>
+              <li className="tip"><span className="mk" /><span><b>Okruh kolem jezera:</b> pohodový půlden s výstupem na vyhlídky Ojstrica a Mala Osojnica.</span></li>
+            </ul>
+          </>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
